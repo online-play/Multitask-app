@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Multitask - Reward App</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        :root { --primary: #6a11cb; --secondary: #2575fc; --accent: #ff5e62; --light: #f8f9fa; --dark: #212529; --success: #00b09b; --warning: #ff9966; --shadow: 0 10px 30px rgba(0, 0, 0, 0.1); --radius: 16px; --transition: all 0.3s ease; }
+        body { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); min-height: 100vh; overflow-x: hidden; color: var(--dark); }
+        #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.6; }
+        .app-container { max-width: 500px; margin: 0 auto; padding: 20px; position: relative; }
+        .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding: 15px; background: linear-gradient(to right, var(--primary), var(--secondary)); border-radius: var(--radius); color: white; box-shadow: var(--shadow); animation: slideDown 0.8s ease; }
+        .logo { display: flex; align-items: center; gap: 10px; }
+        .logo i { font-size: 28px; background: rgba(255, 255, 255, 0.2); padding: 10px; border-radius: 12px; }
+        .logo h1 { font-size: 24px; font-weight: 700; }
+        .login-header-btn { background: rgba(255, 255, 255, 0.2); border: none; color: white; padding: 10px 20px; border-radius: 50px; font-weight: 600; font-size: 14px; cursor: pointer; transition: var(--transition); backdrop-filter: blur(10px); display: flex; align-items: center; gap: 8px; }
+        .user-email { background: rgba(255, 255, 255, 0.2); padding: 8px 15px; border-radius: 50px; font-weight: 600; font-size: 14px; backdrop-filter: blur(10px); }
+        .balance-card { background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%); border-radius: var(--radius); padding: 25px; color: white; margin-bottom: 25px; box-shadow: var(--shadow); position: relative; overflow: hidden; animation: slideUp 0.8s ease 0.2s both; }
+        .balance-amount { font-size: 42px; font-weight: 700; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; }
+        .action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; animation: slideUp 0.8s ease 0.4s both; }
+        .action-btn { background: white; border-radius: var(--radius); padding: 20px; text-align: center; box-shadow: var(--shadow); transition: var(--transition); cursor: pointer; border: none; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .action-btn.watch-ad { background: linear-gradient(to right, #ff5e62, #ff9966); color: white; }
+        .action-btn.withdraw { background: linear-gradient(to right, #00b09b, #96c93d); color: white; }
+        .notice-section { background: white; border-radius: var(--radius); padding: 20px; margin-bottom: 25px; box-shadow: var(--shadow); animation: slideUp 0.8s ease 0.6s both; }
+        .link-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05); transition: var(--transition); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.3s ease; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; border-radius: var(--radius); width: 100%; max-width: 400px; padding: 30px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); max-height: 90vh; overflow-y: auto; }
+        
+        #settings-modal .modal-content { padding: 0; max-width: 100%; height: 100%; border-radius: 0; display: flex; flex-direction: column; background: #fff; }
+        .profile-nav-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #f0f0f0; background: #fff; position: sticky; top: 0; z-index: 10; }
+        .profile-nav-header h3 { font-size: 18px; font-weight: 700; color: #333; }
+        .profile-nav-icon { font-size: 20px; color: #333; cursor: pointer; padding: 5px; }
+        .profile-nav-icon.check { color: var(--secondary); }
+        .profile-body { padding: 20px; overflow-y: auto; flex: 1; }
+        .profile-pic-wrapper { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; }
+        .profile-pic-circle { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #00b09b; border-bottom-color: #eee; padding: 4px; position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+        .profile-pic-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #eee; }
+        .profile-pic-badge { position: absolute; bottom: -10px; background: #eee; color: #555; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+        .change-pic-text { color: #0088cc; font-size: 14px; cursor: pointer; font-weight: 500; }
+        .section-header-text { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: #000; }
+        .styled-input-group { position: relative; margin-bottom: 25px; }
+        .styled-input-group label { position: absolute; top: -9px; left: 12px; background: #fff; padding: 0 5px; font-size: 12px; color: #666; font-weight: 500; }
+        .styled-input-group input, .styled-input-group select { width: 100%; padding: 14px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; color: #333; outline: none; background: transparent; transition: border-color 0.2s; appearance: none; }
+        .styled-input-group input:focus, .styled-input-group select:focus { border-color: var(--secondary); }
+        .styled-input-group input:read-only { background-color: #f9f9f9; color: #777; }
+        .helper-text { font-size: 12px; color: #777; margin-top: -15px; margin-bottom: 20px; margin-left: 5px; }
+        .settings-logout-btn { width: 100%; padding: 15px; background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .settings-logout-btn:hover { background: #ffcdd2; }
+        
+        .form-group { margin-bottom: 20px; width: 100%; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; }
+        .form-group input, .form-group select { width: 100%; padding: 15px; border: 2px solid #eee; border-radius: 12px; }
+        .login-btn { width: 100%; padding: 16px; background: linear-gradient(to right, var(--primary), var(--secondary)); color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600; cursor: pointer; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: white; display: flex; box-shadow: 0 -5px 30px rgba(0, 0, 0, 0.1); z-index: 100; max-width: 500px; left: 50%; transform: translateX(-50%); }
+        .nav-item { flex: 1; text-align: center; padding: 18px 10px; font-weight: 600; color: #666; cursor: pointer; border: none; background: transparent; }
+        .nav-item.active { color: var(--primary); }
+        .main-content { margin-bottom: 80px; }
+        .notice-item { padding: 12px 0; border-bottom: 1px solid #eee; display: flex; gap: 12px; }
+        
+        /* Updated Rules Styles */
+        .rule-item { padding: 15px 0; border-bottom: 1px solid #eee; display: flex; align-items: flex-start; }
+        .rule-number { background: var(--primary); color: white; min-width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 15px; font-size: 14px; font-weight: bold; flex-shrink: 0;}
+        .rule-content { flex: 1; }
+        .rule-content h3 { font-size: 16px; color: var(--primary); margin-bottom: 8px; }
+        .rule-content p { font-size: 14px; color: #555; line-height: 1.5; margin-bottom: 8px; }
+        .rule-content ul { padding-left: 20px; margin-bottom: 5px; }
+        .rule-content li { font-size: 13px; color: #666; margin-bottom: 5px; line-height: 1.4; }
+        
+        .legal-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            text-decoration: none;
+            color: var(--dark);
+            transition: all 0.3s ease;
+        }
+        .legal-link:hover { background: #e9ecef; }
+        .legal-link i { color: var(--primary); margin-right: 10px; }
+
+        .firebase-status { position: fixed; top: 10px; right: 10px; padding: 8px 15px; border-radius: 20px; font-size: 12px; z-index: 1000; color: white; display: flex; gap: 5px; align-items: center; }
+        .firebase-status.connected { background: #4CAF50; }
+        .firebase-status.disconnected { background: #f44336; }
+        @keyframes slideDown { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="firebase-status disconnected" id="firebase-status">
+        <i class="fas fa-cloud"></i> <span>Connecting...</span>
+    </div>
+    <div id="bg-canvas"></div>
+    <div class="app-container" id="app-container">
+        <header class="app-header">
+            <div class="logo"><i class="fas fa-tasks"></i><h1>Multitask</h1></div>
+            <div class="header-buttons" id="header-buttons">
+                <button class="login-header-btn" id="login-header-btn"><i class="fas fa-sign-in-alt"></i> Login</button>
+                <div class="user-info" id="user-info" style="display: none;">
+                    <div class="user-email" id="user-email-display">user@example.com</div>
+                </div>
+            </div>
+        </header>
+        <div class="main-content">
+            <div class="balance-card">
+                <div style="text-align: center; margin-bottom: 8px; opacity: 0.9;">Current Balance</div>
+                <div class="balance-amount"><i class="fas fa-coins" style="margin-right: 10px; font-size: 36px;"></i><span id="balance">100</span></div>
+                <div id="daily-coins" style="text-align: center; opacity: 0.8; font-size: 14px;">Today: 0 coins</div>
+            </div>
+            <div class="action-buttons">
+                <button class="action-btn watch-ad" id="watch-ad-btn"><i class="fas fa-tv" style="font-size: 28px; margin-bottom: 10px;"></i><h3>Watch Video</h3></button>
+                <button class="action-btn withdraw" id="withdraw-btn"><i class="fas fa-wallet" style="font-size: 28px; margin-bottom: 10px;"></i><h3>Withdraw</h3></button>
+            </div>
+            <section id="home-section" class="content-section" style="display: block;">
+                <div class="notice-section">
+                    <div style="display: flex; align-items: center; margin-bottom: 15px; color: var(--primary); font-weight: 600;">
+                        <i class="fas fa-user" style="margin-right: 10px; background: rgba(106, 17, 203, 0.1); padding: 8px; border-radius: 10px;"></i>
+                        <h2>My Profile</h2>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="link-card" id="daily-tasks-btn"><i class="fas fa-tasks" style="font-size: 24px; color: var(--primary); margin-bottom: 8px;"></i><h3>Tasks</h3></div>
+                        <div class="link-card" id="earning-history-btn"><i class="fas fa-history" style="font-size: 24px; color: var(--primary); margin-bottom: 8px;"></i><h3>History</h3></div>
+                        <div class="link-card" id="refer-earn-btn"><i class="fas fa-user-friends" style="font-size: 24px; color: var(--primary); margin-bottom: 8px;"></i><h3>Refer</h3></div>
+                        <div class="link-card" id="profile-settings-btn"><i class="fas fa-cog" style="font-size: 24px; color: var(--primary); margin-bottom: 8px;"></i><h3>Settings</h3></div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Rules Section Updated -->
+            <section id="rules-section" class="content-section" style="display: none;">
+                <div class="notice-section">
+                    <div style="display: flex; align-items: center; margin-bottom: 20px; color: var(--primary); font-weight: 600;">
+                        <i class="fas fa-book" style="margin-right: 10px; background: rgba(106, 17, 203, 0.1); padding: 8px; border-radius: 10px;"></i>
+                        <h2>Rules & Guidelines</h2>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-number">1</div>
+                        <div class="rule-content">
+                            <h3>Ads & Rewards</h3>
+                            <p>Rewards are given only after watching a full rewarded advertisement.</p>
+                            <ul>
+                                <li>Skipping, closing, or interrupting an ad will not give any reward.</li>
+                                <li>Reward availability depends on ad inventory, user eligibility, and region.</li>
+                                <li>The app does not guarantee a fixed number of ads per day.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-number">2</div>
+                        <div class="rule-content">
+                            <h3>Coins & Balance</h3>
+                            <p>Coins are added only by the system after ad completion.</p>
+                            <ul>
+                                <li>Users cannot manually increase or modify coins.</li>
+                                <li>Any attempt to manipulate coins or system behavior may result in account suspension or permanent ban.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-number">3</div>
+                        <div class="rule-content">
+                            <h3>Withdraw Policy</h3>
+                            <p>Withdraw requests are processed manually by the admin team.</p>
+                            <ul>
+                                <li>After submitting a withdraw request, processing may take 24–72 hours.</li>
+                                <li>Submitting a withdraw request does not mean instant payment.</li>
+                                <li>Coins will be deducted only after payment is verified.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-number">4</div>
+                        <div class="rule-content">
+                            <h3>Fraud & Misuse</h3>
+                            <p>Fake activity, invalid traffic, use of bots, VPN abuse, or repeated suspicious behavior is strictly prohibited.</p>
+                            <ul>
+                                <li>The app reserves the right to review, limit, or disable any account involved in suspicious activity.</li>
+                                <li>Any violation may result in loss of coins without prior notice.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-number">5</div>
+                        <div class="rule-content">
+                            <h3>Account Responsibility</h3>
+                            <ul>
+                                <li>Users are responsible for keeping their User ID and account details safe.</li>
+                                <li>The app is not responsible for any loss caused by sharing account information.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-number">6</div>
+                        <div class="rule-content">
+                            <h3>Changes & Updates</h3>
+                            <ul>
+                                <li>Multitask reserves the right to update rules, rewards, or features at any time to ensure fairness and compliance.</li>
+                                <li>Continued use of the app means acceptance of updated rules.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-number">7</div>
+                        <div class="rule-content">
+                            <h3>Disclaimer</h3>
+                            <ul>
+                                <li>Multitask is a reward-based task application, not an investment platform.</li>
+                                <li>Earnings depend on user activity, ad availability, and system policies.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 25px;">
+                        <h3 style="margin-bottom: 10px; font-size: 16px;">Legal Documents</h3>
+                        <a href="https://zawad9990-hue.github.io/multitask-policy/privacy.html" target="_blank" class="legal-link">
+                            <span><i class="fas fa-shield-alt"></i> Privacy Policy</span>
+                            <i class="fas fa-chevron-right" style="font-size: 12px; opacity: 0.5;"></i>
+                        </a>
+                        <a href="https://zawad9990-hue.github.io/multitask-policy/terms.html" target="_blank" class="legal-link">
+                            <span><i class="fas fa-file-contract"></i> Terms & Conditions</span>
+                            <i class="fas fa-chevron-right" style="font-size: 12px; opacity: 0.5;"></i>
+                        </a>
+                    </div>
+                </div>
+            </section>
+            
+            <div class="notice-section">
+                <div style="margin-bottom: 15px; font-weight: 600;">Latest Notices</div>
+                <ul id="notices-list" style="list-style: none;"><li class="notice-item">Loading...</li></ul>
+            </div>
+        </div>
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-section="home"><i class="fas fa-home" style="display: block; margin-bottom: 5px; font-size: 20px;"></i> Home</button>
+            <button class="nav-item" data-section="rules"><i class="fas fa-book" style="display: block; margin-bottom: 5px; font-size: 20px;"></i> Rules</button>
+        </nav>
+    </div>
+    
+    <div class="modal" id="login-modal">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2>Login</h2>
+                <div class="close-modal" id="close-login-modal" style="cursor: pointer;"><i class="fas fa-times"></i></div>
+            </div>
+            <form id="login-form">
+                <div class="form-group"><label>Email</label><input type="email" id="login-email" required></div>
+                <div class="form-group"><label>Password</label><input type="password" id="login-password" required></div>
+                <button type="submit" class="login-btn">Login / Register</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="settings-modal">
+        <div class="modal-content">
+            <div class="profile-nav-header">
+                <i class="fas fa-arrow-left profile-nav-icon" id="close-settings-modal"></i>
+                <h3>Profile</h3>
+                <i class="fas fa-check profile-nav-icon check" id="save-settings-btn"></i>
+            </div>
+            <div class="profile-body">
+                <div class="profile-pic-wrapper">
+                    <div class="profile-pic-circle">
+                        <img src="https://via.placeholder.com/150" alt="Profile" class="profile-pic-img" id="profile-pic-display">
+                        <div class="profile-pic-badge">100%</div>
+                    </div>
+                    <div class="change-pic-text" id="change-pic-btn">Change Profile Picture</div>
+                </div>
+                <div class="section-header-text">Personal Information</div>
+                <form id="settings-form">
+                    <div class="styled-input-group"><input type="text" id="settings-name" placeholder=" " required><label for="settings-name">Name</label></div>
+                    <div class="helper-text">This name will be visible to admin.</div>
+                    <div class="styled-input-group"><input type="date" id="settings-dob" placeholder=" "><label for="settings-dob">Date of Birth</label></div>
+                    <div class="styled-input-group">
+                        <select id="settings-gender"><option value="" disabled selected></option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select>
+                        <label for="settings-gender">Gender</label>
+                    </div>
+                    <div class="styled-input-group"><input type="text" id="settings-location" placeholder=" "><label for="settings-location">Location</label></div>
+                    <div class="styled-input-group"><input type="email" id="settings-email" readonly placeholder=" "><label for="settings-email">Email</label></div>
+                    <button type="button" class="settings-logout-btn" id="settings-logout-btn"><i class="fas fa-sign-out-alt"></i> Logout from Account</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="withdraw-modal">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2>Withdraw</h2>
+                <div style="cursor: pointer;" id="close-withdraw-modal"><i class="fas fa-times"></i></div>
+            </div>
+            <form id="withdraw-form">
+                <div class="form-group"><label>Amount (Coins)</label><input type="number" id="withdraw-amount" min="5000" placeholder="Min 5000" required></div>
+                <div class="form-group">
+                    <label>Method</label>
+                    <select id="withdraw-method" required><option value="bkash">bKash</option><option value="nagad">Nagad</option></select>
+                </div>
+                <div class="form-group"><label>Account Number</label><input type="text" id="withdraw-account" required></div>
+                <button type="submit" class="action-btn withdraw" style="width: 100%;">Submit</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyByKgVqCb29egCVGE8nZEBrDZHVjLmmd1s",
+            authDomain: "multitask-d5478.firebaseapp.com",
+            projectId: "multitask-d5478",
+            storageBucket: "multitask-d5478.firebasestorage.app",
+            messagingSenderId: "448007077328",
+            appId: "1:448007077328:web:1f0dd58af74c0cffa24dd5"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        
+        function initBackground() {
+            try {
+                const canvas = document.getElementById('bg-canvas');
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                canvas.appendChild(renderer.domElement);
+                const geometry = new THREE.BufferGeometry();
+                const count = 100;
+                const pos = new Float32Array(count * 3);
+                for(let i=0; i<count*3; i++) pos[i] = (Math.random()-0.5)*20;
+                geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                const material = new THREE.PointsMaterial({ size: 0.05, color: 0x6a11cb });
+                const mesh = new THREE.Points(geometry, material);
+                scene.add(mesh);
+                camera.position.z = 10;
+                function animate() { requestAnimationFrame(animate); mesh.rotation.y += 0.001; renderer.render(scene, camera); }
+                animate();
+            } catch(e) {}
+        }
+        initBackground();
+
+        let currentUser = null;
+        auth.onAuthStateChanged(user => {
+            const status = document.getElementById('firebase-status');
+            status.className = 'firebase-status connected';
+            status.innerHTML = '<i class="fas fa-cloud"></i> Connected';
+            if (user) {
+                currentUser = user;
+                document.getElementById('login-header-btn').style.display = 'none';
+                document.getElementById('user-info').style.display = 'flex';
+                document.getElementById('user-email-display').textContent = user.email;
+                loadUserData(user.uid);
+            } else {
+                currentUser = null;
+                document.getElementById('login-header-btn').style.display = 'flex';
+                document.getElementById('user-info').style.display = 'none';
+                document.getElementById('balance').textContent = '100';
+            }
+            loadNotices();
+        });
+
+        function loadUserData(uid) {
+            db.collection('users').doc(uid).onSnapshot(doc => {
+                if(doc.exists) {
+                    const data = doc.data();
+                    document.getElementById('balance').textContent = data.coins || 0;
+                    document.getElementById('daily-coins').textContent = `Today: ${data.dailyCoins || 0} coins`;
+                    document.getElementById('settings-email').value = currentUser.email;
+                    document.getElementById('settings-name').value = data.displayName || '';
+                    document.getElementById('settings-dob').value = data.dob || '';
+                    document.getElementById('settings-gender').value = data.gender || '';
+                    document.getElementById('settings-location').value = data.location || '';
+                    const picDisplay = document.getElementById('profile-pic-display');
+                    if(data.photoUrl) picDisplay.src = data.photoUrl;
+                    else picDisplay.src = `https://ui-avatars.com/api/?name=${data.displayName || 'User'}&background=random`;
+                } else {
+                    db.collection('users').doc(uid).set({
+                        email: currentUser.email, coins: 100, dailyCoins: 0, joinDate: new Date().toISOString()
+                    });
+                }
+            });
+        }
+
+        function loadNotices() {
+            db.collection('notices').where('isActive', '==', true).limit(5).get().then(snap => {
+                const list = document.getElementById('notices-list');
+                list.innerHTML = '';
+                if(snap.empty) list.innerHTML = '<li class="notice-item">No active notices.</li>';
+                else {
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        list.innerHTML += `<li class="notice-item"><i class="fas fa-info-circle" style="color:#ff9966"></i> <div><b>${d.title}</b><br><small>${d.message}</small></div></li>`;
+                    });
+                }
+            });
+        }
+
+        const loginModal = document.getElementById('login-modal');
+        document.getElementById('login-header-btn').onclick = () => loginModal.classList.add('active');
+        document.getElementById('close-login-modal').onclick = () => loginModal.classList.remove('active');
+        document.getElementById('login-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const pass = document.getElementById('login-password').value;
+            try {
+                await auth.signInWithEmailAndPassword(email, pass);
+                loginModal.classList.remove('active');
+                alert('Welcome back!');
+            } catch(err) {
+                try {
+                    await auth.createUserWithEmailAndPassword(email, pass);
+                    loginModal.classList.remove('active');
+                    alert('Account created!');
+                } catch(regErr) { alert(regErr.message); }
+            }
+        };
+
+        const settingsModal = document.getElementById('settings-modal');
+        document.getElementById('profile-settings-btn').onclick = () => {
+            if(!currentUser) { loginModal.classList.add('active'); return; }
+            settingsModal.classList.add('active');
+        };
+        document.getElementById('close-settings-modal').onclick = () => settingsModal.classList.remove('active');
+        document.getElementById('save-settings-btn').onclick = async () => {
+            if(!currentUser) return;
+            const name = document.getElementById('settings-name').value;
+            const dob = document.getElementById('settings-dob').value;
+            const gender = document.getElementById('settings-gender').value;
+            const location = document.getElementById('settings-location').value;
+            try {
+                await db.collection('users').doc(currentUser.uid).update({
+                    displayName: name, dob: dob, gender: gender, location: location, lastUpdated: new Date().toISOString()
+                });
+                alert('Profile Updated Successfully!');
+                settingsModal.classList.remove('active');
+            } catch(e) { alert('Error updating: ' + e.message); }
+        };
+
+        document.getElementById('settings-logout-btn').onclick = () => {
+            if(confirm('Are you sure you want to logout?')) {
+                auth.signOut().then(() => {
+                    settingsModal.classList.remove('active');
+                    alert('Logged out successfully.');
+                });
+            }
+        };
+
+        document.getElementById('change-pic-btn').onclick = () => {
+            const url = prompt("Enter Image URL (Feature coming soon):");
+            if(url && currentUser) db.collection('users').doc(currentUser.uid).update({ photoUrl: url });
+        };
+
+        const withdrawModal = document.getElementById('withdraw-modal');
+        document.getElementById('withdraw-btn').onclick = () => {
+            if(!currentUser) { loginModal.classList.add('active'); return; }
+            withdrawModal.classList.add('active');
+        };
+        document.getElementById('close-withdraw-modal').onclick = () => withdrawModal.classList.remove('active');
+        document.getElementById('withdraw-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const amount = parseInt(document.getElementById('withdraw-amount').value);
+            const method = document.getElementById('withdraw-method').value;
+            const account = document.getElementById('withdraw-account').value;
+            const balanceText = document.getElementById('balance').textContent;
+            if(amount > parseInt(balanceText)) { alert('Insufficient balance!'); return; }
+            try {
+                await db.collection('withdraw_requests').add({
+                    userId: currentUser.uid, coins: amount, taka: (amount/5000)*500, method: method, account: account, status: 'pending', timestamp: new Date().toISOString()
+                });
+                alert('Withdraw request submitted!');
+                withdrawModal.classList.remove('active');
+            } catch(err) { alert('Error: ' + err.message); }
+        };
+
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.onclick = function() {
+                const target = this.getAttribute('data-section');
+                document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
+                document.getElementById(target + '-section').style.display = 'block';
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                this.classList.add('active');
+            };
+        });
+        
+        document.getElementById('daily-tasks-btn').onclick = () => alert('Please use Android App for daily tasks.');
+        document.getElementById('earning-history-btn').onclick = () => alert('History feature coming soon.');
+        document.getElementById('refer-earn-btn').onclick = () => alert('Refer code: ' + (currentUser ? currentUser.uid.substring(0,6) : 'Login first'));
+        document.getElementById('watch-ad-btn').onclick = () => alert('AdMob ads are only available in the Android App.');
+    </script>
+</body>
+</html>
